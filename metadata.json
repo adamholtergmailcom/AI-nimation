@@ -1,0 +1,7 @@
+{
+  "name": "SquiggleGen Pro Studio",
+  "description": "An advanced AI-powered CSS animation studio that generates complex, hierarchical hand-drawn, neon, and technical skeletal animations using Gemini 3 models.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
