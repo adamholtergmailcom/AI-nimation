@@ -1,14 +1,19 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Play, Code, Settings, RotateCcw, Copy, Check, Terminal, Sparkles, 
-  ChevronRight, Cpu, Zap, Info, ExternalLink, Plus, Save, Trash, 
+  Cpu, Zap, Info, Plus, Trash, 
   Camera, Sliders, Globe, RefreshCw, Layers, History, FastForward,
-  BrainCircuit, Eye, PenTool, Video, Beaker
+  BrainCircuit, Eye, PenTool, Video, Dog, Wand2, Box, Scissors, Ruler, Monitor
 } from 'lucide-react';
 import { GeminiModel, Preset, ViewMode, OpenRouterModel, AutoLoopStatus } from './types';
-import { PRESETS as INITIAL_PRESETS, PROMPTS } from './constants';
+import { PRESETS as INITIAL_PRESETS } from './constants';
 import { generateAnimationCode, analyzeVideoFrames } from './services/geminiService';
+
+// Icon mapping for serialization
+const ICON_MAP: Record<string, any> = {
+  Dog, Wand2, Box, Scissors, Ruler, Monitor, Sparkles
+};
 
 // --- SQUIGGLY ROBOT COMPONENT ---
 const SquigglyRobot = ({ phase }: { phase: AutoLoopStatus['phase'] }) => {
@@ -38,17 +43,7 @@ const SquigglyRobot = ({ phase }: { phase: AutoLoopStatus['phase'] }) => {
         </div>
       </div>
       
-      {/* SVG Filters for Squigglevision */}
-      <svg xmlns="http://www.w3.org/2000/svg" version="1.1" style={{ display: 'none' }}>
-        <defs>
-          {[0, 1, 2, 3, 4].map(i => (
-            <filter key={i} id={`ui-squiggly-${i}`}>
-              <feTurbulence baseFrequency="0.05" numOctaves="3" result="noise" seed={i} />
-              <feDisplacementMap in="SourceGraphic" in2="noise" scale="3" />
-            </filter>
-          ))}
-        </defs>
-      </svg>
+      {/* SVG Filters for Squigglevision (Global definition in App) */}
     </div>
   );
 };
@@ -57,8 +52,20 @@ export default function App() {
   // --- STATE ---
   const [presets, setPresets] = useState<Preset[]>(() => {
     const saved = localStorage.getItem('squiggle_presets');
-    return saved ? JSON.parse(saved) : INITIAL_PRESETS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.map((p: any) => ({
+          ...p,
+          icon: typeof p.icon === 'string' && ICON_MAP[p.icon] ? ICON_MAP[p.icon] : p.icon
+        }));
+      } catch (e) {
+        return INITIAL_PRESETS;
+      }
+    }
+    return INITIAL_PRESETS;
   });
+  
   const [activePreset, setActivePreset] = useState<Preset>(presets[0]);
   const [model, setModel] = useState<string>(GeminiModel.FLASH);
   const [systemPrompt, setSystemPrompt] = useState(presets[0].prompt);
@@ -67,14 +74,12 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
-  const [showSettings, setShowSettings] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // OpenRouter & Advanced Settings
   const [isOpenRouterEnabled, setIsOpenRouterEnabled] = useState(false);
   const [openRouterKey, setOpenRouterKey] = useState(localStorage.getItem('openrouter_key') || '');
   const [orModels, setOrModels] = useState<OpenRouterModel[]>([]);
-  const [isLoadingModels, setIsLoadingModels] = useState(false);
 
   // AutoLoop Feature
   const [autoLoop, setAutoLoop] = useState<AutoLoopStatus>({
@@ -89,7 +94,17 @@ export default function App() {
 
   // --- PERSISTENCE ---
   useEffect(() => {
-    localStorage.setItem('squiggle_presets', JSON.stringify(presets));
+    const serializedPresets = presets.map(p => {
+      let iconToSave = p.icon;
+      for (const [name, comp] of Object.entries(ICON_MAP)) {
+        if (p.icon === comp) {
+          iconToSave = name;
+          break;
+        }
+      }
+      return { ...p, icon: iconToSave };
+    });
+    localStorage.setItem('squiggle_presets', JSON.stringify(serializedPresets));
   }, [presets]);
 
   useEffect(() => {
@@ -98,15 +113,12 @@ export default function App() {
 
   // --- FETCH MODELS ---
   const fetchORModels = async () => {
-    setIsLoadingModels(true);
     try {
       const res = await fetch("https://openrouter.ai/api/v1/models");
       const data = await res.json();
       setOrModels(data.data || []);
     } catch (e) {
       console.error("Failed to fetch OpenRouter models");
-    } finally {
-      setIsLoadingModels(false);
     }
   };
 
@@ -170,7 +182,7 @@ export default function App() {
         id: `custom_${Date.now()}`,
         name,
         description: `AI-generated custom style.`,
-        icon: Sparkles,
+        icon: 'Sparkles',
         prompt: resp,
         isCustom: true
       };
@@ -187,14 +199,15 @@ export default function App() {
 
   const deletePreset = (id: string) => {
     if (confirm("Delete this custom preset?")) {
-      setPresets(prev => prev.filter(p => p.id !== id));
-      if (activePreset.id === id) setActivePreset(presets[0]);
+      const updated = presets.filter(p => p.id !== id);
+      setPresets(updated);
+      if (activePreset.id === id) setActivePreset(updated[0]);
     }
   };
 
   // --- AUTOLOOP FEATURE ---
   const captureFrames = async (): Promise<string[]> => {
-    const frames: string[] = [];
+    // Simulating capturing frames for analysis
     for (let i = 0; i < 5; i++) {
       await new Promise(r => setTimeout(r, 600)); 
     }
@@ -218,7 +231,6 @@ export default function App() {
       setLoopFeedback(prev => [...prev, `L${i}: ${analysis.critique.substring(0, 80)}...`]);
       
       setAutoLoop(prev => ({ ...prev, phase: 'improving' }));
-      // CRITICAL: Pass currentCode to handleGenerate for iteration rather than new generation
       const improvedCode = await handleGenerate(analysis.improvedPrompt, undefined, currentCode);
       if (improvedCode) currentCode = improvedCode;
       
@@ -229,13 +241,24 @@ export default function App() {
   };
 
   const handleScreenshotIterate = async () => {
-    const base64 = "SIMULATED_SCREENSHOT_DATA"; 
-    await handleGenerate(`${userQuery} (Improve based on this screenshot)`, base64, generatedCode);
+    await handleGenerate(`${userQuery} (Improve based on this visual state)`, "SIMULATED_SCREENSHOT_DATA", generatedCode);
   };
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden">
       
+      {/* GLOBAL SQUIGGLY FILTERS FOR UI */}
+      <svg xmlns="http://www.w3.org/2000/svg" version="1.1" style={{ display: 'none' }}>
+        <defs>
+          {[0, 1, 2, 3, 4].map(i => (
+            <filter key={i} id={`ui-squiggly-${i}`}>
+              <feTurbulence baseFrequency="0.06" numOctaves="3" result="noise" seed={i} />
+              <feDisplacementMap in="SourceGraphic" in2="noise" scale="3" />
+            </filter>
+          ))}
+        </defs>
+      </svg>
+
       {/* SIDEBAR */}
       <aside className="w-[380px] flex flex-col border-r border-slate-800 bg-slate-900 shadow-2xl z-20 transition-all duration-300">
         <header className="p-6 border-b border-slate-800 flex items-center justify-between">
@@ -312,22 +335,38 @@ export default function App() {
               </button>
             </div>
             <div className="space-y-2">
-              {presets.map((p) => (
-                <div key={p.id} className="group relative">
-                  <button
-                    onClick={() => { setActivePreset(p); setSystemPrompt(p.prompt); }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all text-left ${activePreset.id === p.id ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg' : 'bg-slate-800/40 border-slate-700/50 text-slate-400 hover:bg-slate-800'}`}
-                  >
-                    <div className={`p-2 rounded-lg ${activePreset.id === p.id ? 'bg-white/20' : 'bg-slate-700 group-hover:bg-slate-600'}`}>
-                      {typeof p.icon === 'string' ? <span>{p.icon}</span> : <p.icon className="w-4 h-4" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-xs leading-tight">{p.name}</div>
-                      <div className={`text-[9px] truncate opacity-70`}>{p.description}</div>
-                    </div>
-                  </button>
-                </div>
-              ))}
+              {presets.map((p) => {
+                const RawIcon = p.icon;
+                const IconComponent = typeof RawIcon === 'string' && ICON_MAP[RawIcon] ? ICON_MAP[RawIcon] : RawIcon;
+                
+                return (
+                  <div key={p.id} className="group relative">
+                    <button
+                      onClick={() => { setActivePreset(p); setSystemPrompt(p.prompt); }}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all text-left ${activePreset.id === p.id ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg' : 'bg-slate-800/40 border-slate-700/50 text-slate-400 hover:bg-slate-800'}`}
+                    >
+                      <div className={`p-2 rounded-lg ${activePreset.id === p.id ? 'bg-white/20' : 'bg-slate-700 group-hover:bg-slate-600'}`}>
+                        {typeof IconComponent === 'string' ? (
+                          <span className="w-4 h-4 flex items-center justify-center text-xs">{IconComponent.substring(0, 1)}</span>
+                        ) : typeof IconComponent === 'function' || typeof IconComponent === 'object' ? (
+                          <IconComponent className="w-4 h-4" />
+                        ) : (
+                          <Sparkles className="w-4 h-4" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-xs leading-tight">{p.name}</div>
+                        <div className={`text-[9px] truncate opacity-70`}>{p.description}</div>
+                      </div>
+                    </button>
+                    {p.isCustom && (
+                      <button onClick={(e) => { e.stopPropagation(); deletePreset(p.id); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Trash className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </section>
 
@@ -364,7 +403,7 @@ export default function App() {
             </div>
           </section>
 
-          {/* AutoLoop Control - UPDATED MINI INTERFACE */}
+          {/* AutoLoop Control - MINI SIDEBAR INTERFACE */}
           <section className="pt-4 border-t border-slate-800">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
@@ -377,12 +416,12 @@ export default function App() {
                   min="1" max="10" 
                   value={autoLoop.totalLoops}
                   onChange={(e) => setAutoLoop(prev => ({...prev, totalLoops: parseInt(e.target.value)}))}
-                  className="w-8 bg-transparent text-[10px] text-white focus:outline-none text-center"
+                  className="w-8 bg-transparent text-[10px] text-white focus:outline-none text-center font-bold"
                 />
               </div>
             </div>
 
-            <div className={`relative p-4 rounded-xl border transition-all ${autoLoop.active ? 'bg-indigo-600/5 border-indigo-500/30' : 'bg-slate-800/30 border-slate-700/50'}`}>
+            <div className={`relative p-4 rounded-xl border transition-all ${autoLoop.active ? 'bg-indigo-600/10 border-indigo-500/40 shadow-xl shadow-indigo-500/10' : 'bg-slate-800/30 border-slate-700/50'}`}>
                <div className="flex items-center gap-4">
                   <div className="flex-shrink-0">
                      <SquigglyRobot phase={autoLoop.phase} />
@@ -400,23 +439,23 @@ export default function App() {
                                  style={{ width: `${(autoLoop.currentLoop / autoLoop.totalLoops) * 100}%` }}
                               />
                            </div>
-                           <p className="text-[9px] text-slate-500 italic truncate">
-                              {autoLoop.phase === 'generating' && "Designing rig..."}
-                              {autoLoop.phase === 'capturing' && "Processing frames..."}
+                           <p className="text-[9px] text-slate-500 italic truncate font-medium">
+                              {autoLoop.phase === 'generating' && "Synthesizing code..."}
+                              {autoLoop.phase === 'capturing' && "Processing video..."}
                               {autoLoop.phase === 'analyzing' && "Critiquing motion..."}
-                              {autoLoop.phase === 'improving' && "Injecting quality..."}
+                              {autoLoop.phase === 'improving' && "Refining kinematics..."}
                            </p>
                         </div>
                      ) : (
                         <div className="space-y-2">
-                           <p className="text-[10px] text-slate-500 leading-snug">Let AI watch your animation and iteratively fix kinematics.</p>
+                           <p className="text-[10px] text-slate-500 leading-snug">Iteratively refine motion quality via multi-modal AI feedback loop.</p>
                            <button
                               onClick={runAutoLoop}
                               disabled={!generatedCode || autoLoop.active}
-                              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-600/30 rounded-lg text-[10px] font-bold transition-all"
+                              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-600/30 rounded-lg text-[10px] font-bold transition-all shadow-sm"
                            >
                               <FastForward className="w-3 h-3" />
-                              Start Optimization
+                              Optimize Animation
                            </button>
                         </div>
                      )}
@@ -425,9 +464,9 @@ export default function App() {
             </div>
 
             {loopFeedback.length > 0 && (
-              <div className="mt-3 space-y-1 max-h-24 overflow-y-auto custom-scrollbar font-mono text-[9px] text-slate-600">
+              <div className="mt-3 space-y-1 max-h-24 overflow-y-auto custom-scrollbar font-mono text-[9px] text-slate-500 bg-black/20 p-2 rounded border border-slate-800/50">
                 {loopFeedback.map((f, i) => (
-                  <div key={i} className="flex gap-2 border-l border-indigo-500/30 pl-2">
+                  <div key={i} className="flex gap-2 border-l border-indigo-500/30 pl-2 mb-1">
                     <span className="text-indigo-400 shrink-0">#{i+1}</span> {f}
                   </div>
                 ))}
@@ -571,7 +610,7 @@ export default function App() {
 
               {!generatedCode && !isGenerating && (
                  <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-700">
-                    <div className="w-24 h-24 rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-6">
+                    <div className="w-24 h-24 rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-6 shadow-xl">
                       <Sparkles className="w-10 h-10 text-slate-600" />
                     </div>
                     <h3 className="text-xl font-bold text-slate-400 mb-2">Workspace Ready</h3>
@@ -601,6 +640,7 @@ export default function App() {
           justify-content: center;
           overflow: hidden;
           border: 1px solid #1e293b;
+          box-shadow: inset 0 0 20px rgba(0,0,0,0.4);
         }
 
         .squiggle-canvas {
@@ -629,7 +669,7 @@ export default function App() {
           position: absolute;
           top: -4px;
           left: -1.5px;
-          box-shadow: 0 0 5px #ef4444;
+          box-shadow: 0 0 10px #ef4444;
         }
 
         .robot-head {
@@ -658,6 +698,7 @@ export default function App() {
           justify-content: space-around;
           align-items: center;
           padding: 0 4px;
+          transition: all 0.3s;
         }
 
         .robot-eye {
@@ -722,8 +763,9 @@ export default function App() {
           padding: 4px;
           border-radius: 50%;
           border: 1px solid #334155;
-          box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+          box-shadow: 0 4px 10px rgba(0,0,0,0.5);
           animation: tool-float 2s ease-in-out infinite;
+          z-index: 10;
         }
 
         @keyframes tool-float {
@@ -741,7 +783,7 @@ export default function App() {
 
         /* Status Effects */
         .generating .robot-light { background: #4f46e5; animation: antenna-pulse 1s infinite; }
-        .capturing .robot-visor { background: #ef444422; border: 1px solid #ef4444; }
+        .capturing .robot-visor { background: #ef444433; border: 1px solid #ef4444; }
         .analyzing .squiggle-canvas { transform: translateX(1px); animation: ui-squiggly-anim 0.2s infinite steps(1); }
         .improving .robot-head { animation: head-nod 0.5s infinite; }
 

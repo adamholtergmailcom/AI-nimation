@@ -2,14 +2,51 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { GeminiModel } from "../types";
 
+const HUSKY_FULL_REFERENCE = `
+GOLDEN REFERENCE - "THE HUSKY" (CSS MASTERPIECE):
+This code represents the quality floor for SquiggleGen. Use its patterns.
+
+HTML ARCHITECTURE:
+<div class="husky">
+  <div class="mane"><div class="coat"></div></div>
+  <div class="body">
+    <div class="head">
+      <div class="ear"></div><div class="ear"></div>
+      <div class="face">
+        <div class="eye"></div><div class="eye"></div>
+        <div class="nose"></div>
+        <div class="mouth"><div class="lips"></div><div class="tongue"></div></div>
+      </div>
+    </div>
+    <div class="torso"></div>
+  </div>
+  <div class="legs">
+    <div class="front-legs"><div class="leg"></div><div class="leg"></div></div>
+    <div class="hind-leg"></div>
+  </div>
+  <div class="tail">
+    <div class="tail"><div class="tail"><div class="tail"><div class="tail"><div class="tail"><div class="tail"><div class="tail"></div></div></div></div></div></div></div>
+  </div>
+</div>
+
+CSS STRATEGIES:
+1. **Recursive Nesting**: flexible parts (tails, necks) must use nested divs (div > div > div). Each child rotates relative to its parent to create a fluid, jointed curve.
+2. **Transform Origins**: Crucial for rigging. Tails origin at 'center right'. Heads at 'bottom center'.
+3. **Squigglevision**: The main character wrapper must have "animation: squiggly-anim 0.3s infinite;".
+4. **SVG Filters**: Include 5 filters (#squiggly-0 through #squiggly-4) using feTurbulence (baseFrequency 0.02) to create the wobbly line effect.
+5. **Organic Easing**: ALWAYS use "cubic-bezier(0.645, 0.045, 0.355, 1)".
+6. **Pseudo-Detail**: Detail like fur, highlights, pupils, and shadows MUST be ::before and ::after elements.
+7. **Complex Keyframing**: Use many steps (e.g., 0, 10, 25, 50, 75, 100) to create personality-driven motion (blinks, twitches, breathing).
+`;
+
 export const generateAnimationCode = async (
   model: string,
   systemInstruction: string,
   userPrompt: string,
-  visualContext?: string, // base64 image data
+  visualContext?: string,
   isOpenRouter: boolean = false,
   openRouterKey?: string,
-  originalCode?: string // Optional original code for surgical iteration
+  originalCode?: string
 ): Promise<string> => {
   if (isOpenRouter && openRouterKey) {
     return callOpenRouter(model, systemInstruction, userPrompt, visualContext, openRouterKey, originalCode);
@@ -17,41 +54,39 @@ export const generateAnimationCode = async (
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const isPro = model === GeminiModel.PRO;
-
   const isIteration = !!originalCode;
 
   const iterationInstruction = isIteration ? `
     ITERATION MODE ENABLED:
     You are performing a surgical update to an existing animation. 
     1. DO NOT redesign the character or core aesthetic.
-    2. PRESERVE the existing DOM structure and CSS variable names where possible.
-    3. ONLY modify the specific CSS properties or keyframes needed to address the critique provided in the user prompt.
-    4. Focus on fixing timing, transform-origins, or layering issues without breaking the original design.
+    2. PRESERVE the existing DOM structure and CSS variable names.
+    3. ONLY modify the specific CSS properties or keyframes needed to fix the identified bugs.
+    4. Focus on fixing timing, transform-origins, or layering issues.
   ` : "";
 
   const enhancedSystemInstruction = `
     ${systemInstruction}
     
+    ${HUSKY_FULL_REFERENCE}
+
     ${iterationInstruction}
 
     CRITICAL TECHNICAL REQUIREMENTS:
-    - ALWAYS use hierarchical DOM nesting (Head > Face > Eye).
-    - For flexible parts, use recursive <div> nesting (Tail > Tail > Tail) to create jointed kinematic chains.
+    - ALWAYS use hierarchical DOM nesting.
+    - Recursive <div> nesting for fluid, whip-like parts.
     - Leverage ::before and ::after pseudo-elements for detail.
-    - Use "transform-origin" correctly at every joint.
-    - Use "cubic-bezier(0.645, 0.045, 0.355, 1)" for fluid, organic character movement.
-    - Use "vmin" units for responsiveness.
-    - Return ONLY valid, single-file HTML code.
+    - Return ONLY valid, single-file HTML code with embedded <style>.
   `;
 
   const contents: any[] = [
     { text: isIteration 
-      ? `Original Code to Optimize:\n${originalCode}\n\nTask: Surgically improve this animation based on these instructions: ${userPrompt}`
-      : `Design and code a high-quality CSS animation of: ${userPrompt}` 
+      ? `Original Code to Optimize:\n${originalCode}\n\nTask: Improve this animation surgically: ${userPrompt}`
+      : `Design and code a high-quality CSS animation based on the Husky Golden Standard: ${userPrompt}` 
     }
   ];
 
-  if (visualContext) {
+  if (visualContext && visualContext !== "SIMULATED_SCREENSHOT_DATA") {
     contents.push({
       inlineData: {
         mimeType: 'image/jpeg',
@@ -66,7 +101,7 @@ export const generateAnimationCode = async (
       contents: { parts: contents },
       config: {
         systemInstruction: enhancedSystemInstruction,
-        temperature: isIteration ? 0.4 : 0.8, // Lower temperature for iteration to prevent wild deviations
+        temperature: isIteration ? 0.3 : 0.7,
         thinkingConfig: isPro ? { thinkingBudget: 8000 } : undefined,
       },
     });
@@ -79,22 +114,22 @@ export const generateAnimationCode = async (
 };
 
 export const analyzeVideoFrames = async (
-  frames: string[], // Array of base64 images
+  frames: string[],
   originalPrompt: string,
   originalCode: string
 ): Promise<{ critique: string; improvedPrompt: string }> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const promptParts = [
-    { text: "Analyze this CSS animation sequence. Identify specific technical flaws in motion, timing, or structure." },
+    { text: "Analyze this CSS animation sequence. Identify technical flaws in motion, timing, or structure." },
     { text: `Original Intent: ${originalPrompt}` },
-    { text: `Your Task: Identify exactly what is WRONG with the current implementation. Do not suggest a redesign. Suggest specific surgical fixes (e.g., 'Change the transform-origin of the tail to right-center', 'Add a 25% keyframe to the head animation for a blink').` },
+    { text: `Your Task: Identify exactly what is WRONG. Suggest surgical fixes, not redesigns.` },
     ...frames.map(f => ({
       inlineData: {
         mimeType: 'image/jpeg',
         data: f.split(',')[1] || f
       }
-    })),
+    })).slice(0, 3), 
     { text: `Source Code Reference:\n${originalCode}` }
   ];
 
@@ -103,7 +138,7 @@ export const analyzeVideoFrames = async (
       model: GeminiModel.PRO,
       contents: { parts: promptParts },
       config: {
-        systemInstruction: "You are a Technical Animation Lead. Focus on precision, preservation of character design, and surgical code improvements. Return JSON with 'critique' (summary) and 'improvedPrompt' (specific technical instructions for the next model).",
+        systemInstruction: "You are a Technical Animation Lead. Focus on precision and surgical code improvements. Return JSON with 'critique' and 'improvedPrompt'.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -119,7 +154,7 @@ export const analyzeVideoFrames = async (
     return JSON.parse(response.text || "{}");
   } catch (error) {
     console.error("Video Analysis Error:", error);
-    throw error;
+    return { critique: "Analysis failed", improvedPrompt: "Improve movement fluidity and timing." };
   }
 };
 
@@ -134,12 +169,12 @@ const callOpenRouter = async (
   const isIteration = !!originalCode;
   
   const messages: any[] = [
-    { role: "system", content: systemInstruction + (isIteration ? "\n\nDO NOT REDESIGN. PERFORM SURGICAL EDITS ONLY." : "") },
+    { role: "system", content: systemInstruction + "\n\n" + HUSKY_FULL_REFERENCE + (isIteration ? "\n\nSURGICAL EDITS ONLY. DO NOT REDESIGN." : "") },
     {
       role: "user",
-      content: visualContext 
+      content: visualContext && visualContext !== "SIMULATED_SCREENSHOT_DATA"
         ? [
-            { type: "text", text: isIteration ? `Original Code:\n${originalCode}\n\nTask: ${userPrompt}` : userPrompt },
+            { type: "text", text: isIteration ? `Code:\n${originalCode}\n\nTask: ${userPrompt}` : userPrompt },
             { type: "image_url", image_url: { url: visualContext } }
           ]
         : (isIteration ? `Original Code:\n${originalCode}\n\nTask: ${userPrompt}` : userPrompt)
